@@ -1,0 +1,236 @@
+<html><head><base href="https://aiquranmemorization.com">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarteel AI Quran Memorization Assistant</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+  
+  :root {
+    --primary-color: #000000;
+    --secondary-color: #ffffff;
+    --accent-color: #808080;
+  }
+  
+  body, html {
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--primary-color);
+    color: var(--secondary-color);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .container {
+    max-width: 800px;
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  
+  h1 {
+    font-size: 2.5em;
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  
+  select {
+    width: 100%;
+    padding: 15px;
+    margin-bottom: 30px;
+    background-color: var(--secondary-color);
+    color: var(--primary-color);
+    border: none;
+    font-size: 1.2em;
+    border-radius: 5px;
+  }
+  
+  .quran-display {
+    background-color: var(--primary-color);
+    border: 2px solid var(--secondary-color);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  
+  .verse {
+    font-size: 1.5em;
+    line-height: 1.6;
+    margin-bottom: 15px;
+    transition: color 0.3s ease;
+  }
+  
+  .verse.active {
+    color: var(--secondary-color);
+  }
+  
+  .verse.inactive {
+    color: var(--accent-color);
+  }
+  
+  .instruction {
+    font-size: 1.2em;
+    text-align: center;
+    margin-top: 20px;
+    font-weight: bold;
+  }
+  
+  .mic-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 20px;
+  }
+  
+  .mic-icon {
+    width: 24px;
+    height: 24px;
+    margin-right: 10px;
+  }
+  
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  
+  .mic-active {
+    animation: pulse 1.5s infinite;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Quran Memorization Assistant</h1>
+    
+    <select id="surahSelect">
+      <option value="">Select a Surah to memorize</option>
+      <option value="1">Al-Fatihah</option>
+      <option value="2">Al-Baqarah</option>
+      <option value="3">Al-Imran</option>
+      <!-- Add more Surahs as needed -->
+    </select>
+    
+    <div class="quran-display" id="quranDisplay"></div>
+    
+    <div class="instruction" id="instruction"></div>
+    
+    <div class="mic-status">
+      <svg class="mic-icon" id="micIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="8" y1="23" x2="16" y2="23"></line>
+      </svg>
+      <span id="micStatus">Microphone inactive</span>
+    </div>
+  </div>
+
+  <script>
+    const surahSelect = document.getElementById('surahSelect');
+    const quranDisplay = document.getElementById('quranDisplay');
+    const instruction = document.getElementById('instruction');
+    const micIcon = document.getElementById('micIcon');
+    const micStatus = document.getElementById('micStatus');
+    
+    let currentVerse = 0;
+    let repetitions = 0;
+    let verses = [];
+    let recognition;
+    
+    surahSelect.addEventListener('change', loadSurah);
+    
+    function loadSurah() {
+      const surahId = surahSelect.value;
+      if (!surahId) return;
+      
+      fetch(`https://api.alquran.cloud/v1/surah/${surahId}`)
+        .then(response => response.json())
+        .then(data => {
+          verses = data.data.ayahs.map(ayah => ayah.text);
+          displayVerses();
+          startMemorization();
+        });
+    }
+    
+    function displayVerses() {
+      quranDisplay.innerHTML = verses.map((verse, index) => 
+        `<div class="verse ${index === 0 ? 'active' : 'inactive'}">${verse}</div>`
+      ).join('');
+    }
+    
+    function startMemorization() {
+      currentVerse = 0;
+      repetitions = 0;
+      instruction.textContent = "Please recite the highlighted verse";
+      
+      if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'ar-SA';
+        
+        recognition.onstart = () => {
+          micIcon.classList.add('mic-active');
+          micStatus.textContent = 'Listening...';
+        };
+        
+        recognition.onend = () => {
+          micIcon.classList.remove('mic-active');
+          micStatus.textContent = 'Microphone inactive';
+        };
+        
+        recognition.onresult = (event) => {
+          const result = event.results[event.results.length - 1];
+          if (result.isFinal) {
+            checkRecitation(result[0].transcript);
+          }
+        };
+        
+        recognition.start();
+      } else {
+        instruction.textContent = "Speech recognition is not supported in this browser.";
+      }
+    }
+    
+    function checkRecitation(recited) {
+      // This is a simplified check. In a real app, you'd use more sophisticated
+      // matching algorithms and potentially AI to evaluate the recitation.
+      if (recited.trim().toLowerCase() === verses[currentVerse].trim().toLowerCase()) {
+        repetitions++;
+        if (repetitions === 5) {
+          moveToNextVerse();
+        } else {
+          instruction.textContent = `Well done! Please recite the verse again. (${repetitions}/5)`;
+        }
+      } else {
+        instruction.textContent = "Please try again. Focus on correct pronunciation.";
+      }
+    }
+    
+    function moveToNextVerse() {
+      document.querySelectorAll('.verse')[currentVerse].classList.remove('active');
+      document.querySelectorAll('.verse')[currentVerse].classList.add('inactive');
+      
+      currentVerse++;
+      repetitions = 0;
+      
+      if (currentVerse < verses.length) {
+        document.querySelectorAll('.verse')[currentVerse].classList.remove('inactive');
+        document.querySelectorAll('.verse')[currentVerse].classList.add('active');
+        instruction.textContent = "Please recite the highlighted verse";
+      } else {
+        finishMemorization();
+      }
+    }
+    
+    function finishMemorization() {
+      recognition.stop();
+      instruction.textContent = "Congratulations! You've completed memorizing this Surah.";
+    }
+  </script>
+</body>
+</html>
